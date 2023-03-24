@@ -1,255 +1,272 @@
-/*******************************************************
- * Homework 2: OpenGL                                  *
- *-----------------------------------------------------*
- * First, you should fill in problem1(), problem2(),   *
- * and problem3() as instructed in the written part of *
- * the problem set.  Then, express your creativity     *
- * with problem4()!                                    *
- *                                                     *
- * Note: you will only need to add/modify code where   *
- * it says "TODO".                                     *
- *                                                     *
- * The left mouse button rotates, the right mouse      *
- * button zooms, and the keyboard controls which       *
- * problem to display.                                 *
- *                                                     *
- * For Linux/OS X:                                     *
- * To compile your program, just type "make" at the    *
- * command line.  Typing "make clean" will remove all  *
- * computer-generated files.  Run by typing "./hw2"    *
- *                                                     *
- * For Visual Studio:                                  *
- * You can create a project with this main.cpp and     *
- * build and run the executable as you normally would. *
- *******************************************************/
 
 #include <iostream>
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
 
-#include "./freeglut-3.2.1/include/GL/freeglut.h"
+// GLEW
+// #ifdef GLEW_STATIC
+// #  define GLEWAPI extern
+// #else
+// #  ifdef GLEW_BUILD
+// #    define GLEWAPI extern __declspec(dllexport)
+// #  else
+// #    define GLEWAPI extern __declspec(dllimport)
+// #  endif
+// #endif
 
-using namespace std;
+#include <GL/glew.h>
 
-bool leftDown = false, rightDown = false;
-int lastPos[2];
-float cameraPos[4] = {0,1,4,1};
-int windowWidth = 640, windowHeight = 480;
-double yRot = 0;
-int curProblem = 4; // TODO: change this number to try different examples
+// GLFW
+#include <GLFW/glfw3.h>
 
-float specular[] = { 1.0, 1.0, 1.0, 1.0 };
-float shininess[] = { 50.0 };
+// GLM Mathematics
+#define GLM_FORCE_RADIANS // force everything in radian
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
-void problem1() {
-
-  float cx = 0;
-  float cy = 0;
-  float px = 2.0;
-  float py = 2.0;
-  float theta = 36;
-  float xf = 0;
-   float yf = 0;
-
-        // actual calculations..
-int i = 1;
-  
-  while (i <= 10) {
-
-  xf = (cx + ((float)(px - cx) * cos(theta)) - ((float)(py - cy) *  sin(theta)));
-  yf = (cy + ((float)(px - cx) * sin(theta)) +((float)(py - cy) * cos(theta)));
-
-  
-  
- // glRotatef(36, 0.0, 0.0, 0.0);
-cout << xf << endl;
-
-    
-    glPushMatrix();
-    glRotatef(theta, 0.0, 0.0, 1.0);
-     glutSolidTeapot(0.25);
-    glPopMatrix();
-    
-    glTranslatef(xf, yf, 0.0);
-    
-    i = i + 1;
-    theta = theta + 36.0;
-   // px = xf;
-   // py = yf;
-  }
-    
-//glTranslatef(2.0, 0.0, 0.0);
-//glutSolidTeapot(0.25);
+// Other includes
+#include "Shader.h"
+#include "Camera.h"
 
 
-  
-    // TODO: Your code here!
-}
+// Function prototypes
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
+void mouse_callback(GLFWwindow* window, double xpos, double ypos);
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+void do_movement();
 
-void problem2() {
+// Window dimensions
+const GLuint WIDTH = 800, HEIGHT = 600;
 
-  int i = 0;
-while (i < 15){
+// Camera
+Camera  camera(glm::vec3(0.0f, 0.0f, 3.0f));
+GLfloat lastX  =  WIDTH  / 2.0;
+GLfloat lastY  =  HEIGHT / 2.0;
+bool    keys[1024];
 
- glutSolidCube(0.25);
+// Light attributes
+glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
 
-  int build = 0;
-  
-   glPushMatrix();
-  while (build < i){
+// Deltatime
+GLfloat deltaTime = 0.0f;	// Time between current frame and last frame
+GLfloat lastFrame = 0.0f;  	// Time of last frame
 
-   
-    glTranslatef(0.0, 0.25, 0.0);
+// The MAIN function, from here we start the application and run the game loop
+int main()
+{
+    // Init GLFW
+    glfwInit();
+    // Set all the required options for GLFW
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
 
-  glutSolidCube(0.25);
-   
-    build ++;
-  }
-   glPopMatrix();
+    // Create a GLFWwindow object that we can use for GLFW's functions
+    GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "HW3", nullptr, nullptr);
+    glfwMakeContextCurrent(window);
 
-  glTranslatef(0.25, 0.0, 0.0);
+    // Set the required callback functions
+    glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
 
-  i++;
-}
+    // GLFW Options
+    //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    // Set this to true so GLEW knows to use a modern approach to retrieving function pointers and extensions
+    glewExperimental = GL_TRUE;
+    // Initialize GLEW to setup the OpenGL Function pointers
+    glewInit();
+
+    int w,h;
+    glfwGetFramebufferSize( window, &w, &h);
+
+    // Define the viewport dimensions
+    glViewport(0, 0, w, h);
+
+    // OpenGL options
+    glEnable(GL_DEPTH_TEST);
+
+    // Build and compile our shader program
+    Shader lightingShader("phong.vs", "phong.frag");
+
+    // Set up vertex data (and buffer(s)) and attribute pointers
+    GLfloat vertices[] = {
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
+
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+         0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
+
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+    };
+    // First, set the container's VAO (and VBO)
+    GLuint VBO, containerVAO;
+    glGenVertexArrays(1, &containerVAO);
+    glGenBuffers(1, &VBO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glBindVertexArray(containerVAO);
+    // Position attribute
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (GLvoid*)0);
+    glEnableVertexAttribArray(0);
+    // Normal attribute
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
+
+    // Then, we set the light's VAO (VBO stays the same. After all, the vertices are the same for the light object (also a 3D cube))
+    GLuint lightVAO;
+    glGenVertexArrays(1, &lightVAO);
+    glBindVertexArray(lightVAO);
+    // We only need to bind to the VBO (to link it with glVertexAttribPointer), no need to fill it; the VBO's data already contains all we need.
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+    // Game loop
+    while (!glfwWindowShouldClose(window))
+    {
+        // Calculate deltatime of current frame
+        GLfloat currentFrame = glfwGetTime();
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        // Check if any events have been activiated (key pressed, mouse moved etc.) and call corresponding response functions
+        glfwPollEvents();
+        do_movement();
+
+        // Clear the colorbuffer
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        // Use cooresponding shader when setting uniforms/drawing objects
+        lightingShader.Use();
+        GLint objectColorLoc = glGetUniformLocation(lightingShader.Program, "objectColor");
+        GLint lightColorLoc  = glGetUniformLocation(lightingShader.Program, "lightColor");
+        GLint lightPosLoc    = glGetUniformLocation(lightingShader.Program, "lightPos");
+        GLint viewPosLoc     = glGetUniformLocation(lightingShader.Program, "viewPos");
+        glUniform3f(objectColorLoc, 1.0f, 0.5f, 0.31f);
+        glUniform3f(lightColorLoc,  1.0f, 1.0f, 1.0f);
+        glUniform3f(lightPosLoc,    lightPos.x, lightPos.y, lightPos.z);
+        glUniform3f(viewPosLoc,     camera.Position.x, camera.Position.y, camera.Position.z);
 
 
-  
-// glutSolidCube(0.25);
 
- // glTranslatef(0.25, 0.0, 0.0);
+        // Create camera transformations
+        glm::mat4 view;
+        view = camera.GetViewMatrix();
+        glm::mat4 projection;
+        // TODO: set up the project matrix
+        projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f); 
 
- // glutSolidCube(0.25);
-  
- // glTranslatef(0.0, 0.25, 0.0);
+        // Get the uniform locations
+        GLint modelLoc = glGetUniformLocation(lightingShader.Program, "model");
+        GLint viewLoc  = glGetUniformLocation(lightingShader.Program,  "view");
+        GLint projLoc  = glGetUniformLocation(lightingShader.Program,  "projection");
+        // Pass the matrices to the shader
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
- // glutSolidCube(0.25);
-    // TODO: Your code here!
-}
+        // Draw the container (using container's vertex attributes)
+        glBindVertexArray(containerVAO);
+        glm::mat4 model = glm::mat4( 1.0 );
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glBindVertexArray(0);
 
-void problem3() {
-
-  int i = 6;
-
-  while(i > 0){
-    glTranslatef(0.25, 0.0, 0.0);
-    
-    int j = 0;
-    glPushMatrix();
-    
-    while(j < i){
-
-      glutSolidTeapot(0.25);
-  glTranslatef(0.50, 0.0, 0.0);
-      j++;
-    }  
-    
-  glPopMatrix();
-
-glTranslatef(0.0, -0.50, 0.0);
-    i--;
-  }
-  
-  
-    // TODO: Your code here!
-}
-
-void problem4() {
-
-  
-  
-    // TODO: Your code here!
-}
-
-void display() {
-	glClearColor(0,0,0,0);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	glDisable(GL_LIGHTING);
-	glEnable(GL_DEPTH_TEST);
-	glBegin(GL_LINES);
-		glColor3f(1,0,0); glVertex3f(0,0,0); glVertex3f(1,0,0); // x axis
-		glColor3f(0,1,0); glVertex3f(0,0,0); glVertex3f(0,1,0); // y axis
-		glColor3f(0,0,1); glVertex3f(0,0,0); glVertex3f(0,0,1); // z axis
-	glEnd(/*GL_LINES*/);
-
-	glEnable(GL_LIGHTING);
-	glShadeModel(GL_SMOOTH);
-	glMaterialfv(GL_FRONT, GL_SPECULAR, specular);
-	glMaterialfv(GL_FRONT, GL_SHININESS, shininess);
-	glEnable(GL_LIGHT0);
-
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glViewport(0,0,windowWidth,windowHeight);
-
-	float ratio = (float)windowWidth / (float)windowHeight;
-	gluPerspective(50, ratio, 1, 1000);
-
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-	gluLookAt(cameraPos[0], cameraPos[1], cameraPos[2], 0, 0, 0, 0, 1, 0);
-
-	glLightfv(GL_LIGHT0, GL_POSITION, cameraPos);
-
-	glRotatef(yRot,0,1,0);
-
-	if (curProblem == 1) problem1();
-	if (curProblem == 2) problem2();
-	if (curProblem == 3) problem3();
-	if (curProblem == 4) problem4();
-
-	glutSwapBuffers();
-}
-
-void mouse(int button, int state, int x, int y) {
-	if (button == GLUT_LEFT_BUTTON) leftDown = (state == GLUT_DOWN);
-	else if (button == GLUT_RIGHT_BUTTON) rightDown = (state == GLUT_DOWN);
-
-	lastPos[0] = x;
-	lastPos[1] = y;
-}
-
-void mouseMoved(int x, int y) {
-	if (leftDown) yRot += (x - lastPos[0])*.1;
-	if (rightDown) {
-		for (int i = 0; i < 3; i++)
-			cameraPos[i] *= pow(1.1,(y-lastPos[1])*.1);
-	}
-
-
-	lastPos[0] = x;
-	lastPos[1] = y;
-	glutPostRedisplay();
-}
-
-void keyboard(unsigned char key, int x, int y) {
-	curProblem = key-'0';
-    if (key == 'q' || key == 'Q' || key == 27){
-        exit(0);
+        // Swap the screen buffers
+        glfwSwapBuffers(window);
     }
-	glutPostRedisplay();
+
+    // Terminate GLFW, clearing any resources allocated by GLFW.
+    glfwTerminate();
+    return 0;
 }
 
-void reshape(int width, int height) {
-	windowWidth = width;
-	windowHeight = height;
-	glutPostRedisplay();
+// Is called whenever a key is pressed/released via GLFW
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode)
+{
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, GL_TRUE);
+    if (key >= 0 && key < 1024)
+    {
+        if (action == GLFW_PRESS)
+            keys[key] = true;
+        else if (action == GLFW_RELEASE)
+            keys[key] = false;
+    }
 }
 
-int main(int argc, char** argv) {
-	glutInit(&argc, argv);
-	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-	glutInitWindowSize(windowWidth, windowHeight);
-	glutCreateWindow("HW2");
+void do_movement()
+{
+    // Camera controls
+    if (keys[GLFW_KEY_W])
+        camera.ProcessKeyboard(FORWARD, deltaTime);
+    if (keys[GLFW_KEY_S])
+        camera.ProcessKeyboard(BACKWARD, deltaTime);
+    if (keys[GLFW_KEY_A])
+        camera.ProcessKeyboard(LEFT, deltaTime);
+    if (keys[GLFW_KEY_D])
+        camera.ProcessKeyboard(RIGHT, deltaTime);
+}
 
-	glutDisplayFunc(display);
-	glutMotionFunc(mouseMoved);
-	glutMouseFunc(mouse);
-	glutReshapeFunc(reshape);
-	glutKeyboardFunc(keyboard);
+bool firstMouse = true;
+void mouse_callback(GLFWwindow* window, double xpos, double ypos)
+{
+    if (firstMouse)
+    {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
 
-	glutMainLoop();
+    GLfloat xoffset = xpos - lastX;
+    GLfloat yoffset = lastY - ypos;  // Reversed since y-coordinates go from bottom to left
 
-	return 0;
+    lastX = xpos;
+    lastY = ypos;
+
+    camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+    camera.ProcessMouseScroll(yoffset);
 }
